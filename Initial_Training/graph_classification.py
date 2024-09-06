@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch_geometric.loader import DataLoader
-from torch_geometric.datasets import Amazon, MoleculeNet, Reddit, NeuroGraphDataset, TUDataset
+from torch_geometric.datasets import MoleculeNet, NeuroGraphDataset
 from torch_geometric.graphgym import init_weights
 from Initial_Training.Models.Model import GraphClassificationModel
 from Initial_Training.metrics import classification_binary_metrics, classification_multilabel_metrics
@@ -214,6 +214,7 @@ if __name__ == '__main__':
         category = 'multilabel'
     elif task == 'neuro':
         dataset = NeuroGraphDataset(root=neuro_path, name='HCPActivity')
+        catgeory = 'binary'
 
     # Split as Train, Validation and Test Folds
     dataset = dataset.shuffle()
@@ -248,7 +249,7 @@ if __name__ == '__main__':
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, 'min', verbose=True)
 
-    if dataset[0].num_classes == 2:
+    if dataset[0].num_classes == 2 or category == 'multilabel':
         loss_function = nn.BCEWithLogitsLoss()
     else:
         loss_function = nn.CrossEntropyLoss()
