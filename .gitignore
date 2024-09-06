@@ -8,6 +8,11 @@
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 
+#Torch
+*.pth
+wandb
+
+
 # IPython
 profile_default/
 ipython_config.py
