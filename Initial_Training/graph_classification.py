@@ -3,7 +3,7 @@ from torch import nn
 from torch_geometric.loader import DataLoader
 from torch_geometric.datasets import MoleculeNet, NeuroGraphDataset
 from torch_geometric.graphgym import init_weights
-from Models.Model import GraphClassificationModel
+from Models.Model import GraphClassificationModel, DrugClassificationModel
 from metrics import classification_binary_metrics, classification_multilabel_metrics
 from sklearn.model_selection import train_test_split
 import torch.multiprocessing as tmp
@@ -209,16 +209,24 @@ if __name__ == '__main__':
     task = input("Enter the dataset you want to work with: ")
     if task == 'hiv':
         dataset = MoleculeNet(root=hiv_path, name='HIV')
-        category = 'binary'
         num_labels = 1
+        model = DrugClassificationModel(
+            input_features=dataset[0].num_node_features, num_features=128, num_labels=num_labels, category='binary')
     elif task == 'tox21':
         dataset = MoleculeNet(root=tox21_path, name='Tox21')
         category = 'multilabel'
         num_labels = dataset.num_classes
+
+        model = DrugClassificationModel(
+            input_features=dataset[0].num_node_features, num_features=128, num_labels=num_labels, category='multilabel')
+
     elif task == 'neuro':
         dataset = NeuroGraphDataset(root=neuro_path, name='HCPActivity')
-        catgeory = 'binary'
+        category = 'binary'
         num_labels = 1
+
+        model = GraphClassificationModel(num_features=dataset[0].num_node_features, num_labels=num_labels,
+                                         category=category)
 
     # Split as Train, Validation and Test Folds
     dataset = dataset.shuffle()
@@ -242,8 +250,6 @@ if __name__ == '__main__':
             "Method": "Graph Convolution",
         })
 
-    model = GraphClassificationModel(num_features=dataset[0].num_node_features, num_labels=num_labels,
-                                     category=category)
     init_weights(model)  # Weight Initialisation
     LR = 0.001
     NUM_EPOCHS = 10000
