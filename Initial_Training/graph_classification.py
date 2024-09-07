@@ -3,8 +3,8 @@ from torch import nn
 from torch_geometric.loader import DataLoader
 from torch_geometric.datasets import MoleculeNet, NeuroGraphDataset
 from torch_geometric.graphgym import init_weights
-from Initial_Training.Models.Model import GraphClassificationModel
-from Initial_Training.metrics import classification_binary_metrics, classification_multilabel_metrics
+from Models.Model import GraphClassificationModel
+from metrics import classification_binary_metrics, classification_multilabel_metrics
 from sklearn.model_selection import train_test_split
 import torch.multiprocessing as tmp
 from dotenv import load_dotenv
@@ -25,7 +25,7 @@ def train_epoch():
 
         model.zero_grad()
         logits, predictions = model(
-            graphs.x, edges=graphs.edge_index, batch=graphs.batch
+            graphs.x.float(), edges=graphs.edge_index, batch=graphs.batch
         )
 
         target_vector = graphs.y.view(graphs.y.size(0), 1)
@@ -40,7 +40,7 @@ def train_epoch():
         # Losses
         epoch_loss += loss.item()
 
-        if graphs[0].num_classes == 2:
+        if dataset.num_classes == 2:
             acc, f1, prec, rec, auc = classification_binary_metrics(
                 predictions, target_vector.int())
         else:
@@ -65,14 +65,14 @@ def val_epoch():
 
     for step, graphs in enumerate(val_loader):
         logits, predictions = model(
-            graphs.x, edges=graphs.edge_index, batch=graphs.batch)
+            graphs.x.float(), edges=graphs.edge_index, batch=graphs.batch)
 
         target_vector = graphs.y.view(graphs.y.size(0), 1)
         loss = loss_function(logits, target_vector.float())
 
         epoch_loss += loss.item()
 
-        if graphs[0].num_classes == 2:
+        if dataset.num_classes == 2:
             acc, f1, prec, rec, auc = classification_binary_metrics(
                 predictions, target_vector)
         else:
@@ -97,14 +97,14 @@ def test_epoch():
 
     for step, graphs in enumerate(train_loader):
         logits, predictions = model(
-            graphs.x, edges=graphs.edge_index, batch=graphs.batch)
+            graphs.x.float(), edges=graphs.edge_index, batch=graphs.batch)
 
         target_vector = graphs.y.view(graphs.y.size(0), 1)
         loss = loss_function(logits, target_vector.float())
 
         epoch_loss += loss.item()
 
-        if graphs[0].num_classes == 2:
+        if dataset.num_classes == 2:
             acc, f1, prec, rec, auc = classification_binary_metrics(
                 predictions, target_vector)
         else:
@@ -185,7 +185,8 @@ def training_loop():
                 })
 
                 # Save weights
-                weights_path = f"{task}/weights/run_1/model_{epoch+1}.pth"
+                weights_path = f"Initial_Training/{
+                    task}/run_1/model_{epoch+1}.pth"
                 torch.save(model.state_dict(), weights_path)
 
 
@@ -209,12 +210,15 @@ if __name__ == '__main__':
     if task == 'hiv':
         dataset = MoleculeNet(root=hiv_path, name='HIV')
         category = 'binary'
+        num_labels = 1
     elif task == 'tox21':
         dataset = MoleculeNet(root=tox21_path, name='Tox21')
         category = 'multilabel'
+        num_labels = dataset.num_classes
     elif task == 'neuro':
         dataset = NeuroGraphDataset(root=neuro_path, name='HCPActivity')
         catgeory = 'binary'
+        num_labels = 1
 
     # Split as Train, Validation and Test Folds
     dataset = dataset.shuffle()
@@ -238,7 +242,7 @@ if __name__ == '__main__':
             "Method": "Graph Convolution",
         })
 
-    model = GraphClassificationModel(num_features=dataset[0].num_node_features, num_labels=dataset[0].num_classes,
+    model = GraphClassificationModel(num_features=dataset[0].num_node_features, num_labels=num_labels,
                                      category=category)
     init_weights(model)  # Weight Initialisation
     LR = 0.001
@@ -249,7 +253,7 @@ if __name__ == '__main__':
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, 'min', verbose=True)
 
-    if dataset[0].num_classes == 2 or category == 'multilabel':
+    if dataset.num_classes == 2 or category == 'multilabel':
         loss_function = nn.BCEWithLogitsLoss()
     else:
         loss_function = nn.CrossEntropyLoss()
