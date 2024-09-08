@@ -1,7 +1,7 @@
 from torch_geometric.loader import DataLoader
 from torch_geometric.graphgym import init_weights
 from torch_geometric.nn import VGAE
-from torch_geometric.datasets import ZINC, NeuroGraphDataset, Amazon, PPI
+from torch_geometric.datasets import ZINC, NeuroGraphDataset
 from Models.tokenizer import DrugTokenizer, NeuroGraphTokenizer
 from sklearn.model_selection import train_test_split
 from dotenv import load_dotenv
@@ -71,7 +71,7 @@ def training_loop():
                 "Learning Rate": optimizer.param_groups[0]['lr']
             })
 
-            if (epoch+1) % 10 == 0:
+            if (epoch+1) % 5 == 0:
                 path = f"Initial_Training/tokenizers/{task}/model{epoch+1}.pth"
 
                 torch.save(model.encoder.state_dict(), path)
@@ -102,7 +102,10 @@ if __name__ == '__main__':
         encoder = DrugTokenizer(in_features=train_set.num_features)
     elif task == 'neurograph':
         dataset = NeuroGraphDataset(root=neuro_path, name='HCPActivity')
-        train_set, test_set = train_test_split(dataset, test_size=0.80)
+        dataset = dataset.shuffle()
+        # Used 20% of the dataset for embeddings.
+        train_set, _ = train_test_split(dataset, test_size=0.80)
+        train_set, test_set = train_test_split(dataset, test_size=0.20)
         encoder = NeuroGraphTokenizer(in_features=dataset.num_features)
 
     train_loader = DataLoader(train_set, **params)
