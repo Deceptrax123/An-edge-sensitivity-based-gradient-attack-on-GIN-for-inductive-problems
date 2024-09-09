@@ -4,7 +4,8 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.datasets import MoleculeNet, NeuroGraphDataset
 from torch_geometric.graphgym import init_weights
 from Models.Model import GraphClassificationModel, DrugClassificationModel
-from metrics import classification_binary_metrics, classification_multilabel_metrics
+from Models.tokenizer import DrugTokenizer, NeuroGraphTokenizer
+from metrics import classification_binary_metrics, classification_multilabel_metrics, classification_multiclass_metrics
 from sklearn.model_selection import train_test_split
 import torch.multiprocessing as tmp
 from dotenv import load_dotenv
@@ -28,8 +29,7 @@ def train_epoch():
             graphs.x.float(), edges=graphs.edge_index, batch=graphs.batch
         )
 
-        target_vector = graphs.y.view(graphs.y.size(0), 1)
-        loss = loss_function(logits, target_vector.float())
+        loss = loss_function(logits, predictions.float())
 
         loss.backward()
         # perform gradient clipping
@@ -42,10 +42,13 @@ def train_epoch():
 
         if dataset.num_classes == 2:
             acc, f1, prec, rec, auc = classification_binary_metrics(
-                predictions, target_vector.int())
+                predictions, predictions.int())
+        elif dataset.num_classes > 2 and task == 'multiclass':
+            acc, f1, prec, rec, auc = classification_multiclass_metrics(
+                predictions, predictions.int(), num_classes=dataset.num_classes)
         else:
             acc, f1, prec, rec, auc = classification_multilabel_metrics(
-                predictions, target_vector.int())
+                predictions, predictions.int(), num_labels=dataset.num_classes)
 
         epoch_acc += acc.item()
         epoch_prec += prec.item()
@@ -67,17 +70,19 @@ def val_epoch():
         logits, predictions = model(
             graphs.x.float(), edges=graphs.edge_index, batch=graphs.batch)
 
-        target_vector = graphs.y.view(graphs.y.size(0), 1)
-        loss = loss_function(logits, target_vector.float())
+        loss = loss_function(logits, predictions.float())
 
         epoch_loss += loss.item()
 
         if dataset.num_classes == 2:
             acc, f1, prec, rec, auc = classification_binary_metrics(
-                predictions, target_vector)
+                predictions, predictions.int())
+        elif dataset.num_classes > 2 and task == 'multiclass':
+            acc, f1, prec, rec, auc = classification_multiclass_metrics(
+                predictions, predictions.int(), num_classes=dataset.num_classes)
         else:
             acc, f1, prec, rec, auc = classification_multilabel_metrics(
-                predictions, target_vector.int())
+                predictions, predictions.int(), num_labels=dataset.num_classes)
 
         epoch_acc += acc.item()
         epoch_prec += prec.item()
@@ -99,18 +104,19 @@ def test_epoch():
         logits, predictions = model(
             graphs.x.float(), edges=graphs.edge_index, batch=graphs.batch)
 
-        target_vector = graphs.y.view(graphs.y.size(0), 1)
-        loss = loss_function(logits, target_vector.float())
+        loss = loss_function(logits, predictions.float())
 
         epoch_loss += loss.item()
 
         if dataset.num_classes == 2:
             acc, f1, prec, rec, auc = classification_binary_metrics(
-                predictions, target_vector)
+                predictions, predictions.int())
+        elif dataset.num_classes > 2 and task == 'multiclass':
+            acc, f1, prec, rec, auc = classification_multiclass_metrics(
+                predictions, predictions.int(), num_classes=dataset.num_classes)
         else:
             acc, f1, prec, rec, auc = classification_multilabel_metrics(
-                predictions, target_vector.int())
-
+                predictions, predictions.int(), num_labels=dataset.num_classes)
         epoch_acc += acc.item()
         epoch_prec += prec.item()
         epoch_f1 += f1.item()
@@ -165,7 +171,7 @@ def training_loop():
                 "Test AUC": val_auc
             })
 
-            if (epoch+1) % 10 == 0:
+            if (epoch+1) % 3 == 0:
                 test_loss, test_acc, test_prec, test_rec, test_f1, test_auc = test_epoch()
                 print("------------Test Metrics-------------")
                 print(f"Test Loss: {test_loss}")
@@ -209,9 +215,21 @@ if __name__ == '__main__':
     task = input("Enter the dataset you want to work with: ")
     if task == 'hiv':
         dataset = MoleculeNet(root=hiv_path, name='HIV')
+
+        dataset = dataset.shuffle()
+        train_ratio = 0.75
+        val_ratio = 0.15
+        test_ratio = 0.10
+        train_set, test_set = train_test_split(
+            dataset, test_size=1-train_ratio)
+        val_set, test_set = train_test_split(
+            test_set, test_size=test_ratio/(test_ratio+val_ratio))
+
         num_labels = 1
         model = DrugClassificationModel(
-            input_features=dataset[0].num_node_features, num_features=128, num_labels=num_labels, category='binary')
+            input_features=dataset[0].num_node_features, num_features=64, num_labels=num_labels, category='binary')
+        model.load_state_dict(torch.load(
+            "Initial_Training/tokenizers/Drugs/model90.pth", weights_only=True), strict=False)
     elif task == 'tox21':
         dataset = MoleculeNet(root=tox21_path, name='Tox21')
         category = 'multilabel'
@@ -222,21 +240,22 @@ if __name__ == '__main__':
 
     elif task == 'neuro':
         dataset = NeuroGraphDataset(root=neuro_path, name='HCPActivity')
-        category = 'binary'
-        num_labels = 1
+        dataset = dataset.shuffle()
+        train_ratio = 0.75
+        val_ratio = 0.15
+        test_ratio = 0.10
+        train_set, test_set = train_test_split(
+            dataset, test_size=1-train_ratio)
+        val_set, test_set = train_test_split(
+            test_set, test_size=test_ratio/(test_ratio+val_ratio))
+
+        num_labels = 7
+        category = 'multiclass'
 
         model = GraphClassificationModel(num_features=dataset[0].num_node_features, num_labels=num_labels,
                                          category=category)
-
-    # Split as Train, Validation and Test Folds
-    dataset = dataset.shuffle()
-    train_ratio = 0.75
-    val_ratio = 0.15
-    test_ratio = 0.10
-    train_set, test_set = train_test_split(
-        dataset, test_size=1-train_ratio)
-    val_set, test_set = train_test_split(
-        test_set, test_size=test_ratio/(test_ratio+val_ratio))
+        model.load_state_dict(torch.load(
+            "Initial_Training/tokenizers/neurograph/model10.pth", weights_only=False), strict=False)
 
     # Loaders
     train_loader = DataLoader(train_set, **params)

@@ -8,22 +8,17 @@ import torch.nn.functional as F
 
 class DrugClassificationModel(Module):
     def __init__(self, input_features, num_features, num_labels, category):
-        super(GraphClassificationModel, self).__init__()
+        super(DrugClassificationModel, self).__init__()
         self.category = category
-        self.layer1 = GCNConv(in_channels=input_features,
-                              out_channels=num_features*2, normalize=True)
-        self.edge1 = EdgePooling(
-            in_channels=num_features*2, dropout=0.2, add_to_edge_score=0.5)
 
+        self.initial = GCNConv(in_channels=input_features,
+                               out_channels=1, normalize=True)
+        self.layer1 = GCNConv(in_channels=1,
+                              out_channels=num_features*2, normalize=True)
         self.layer2 = GCNConv(in_channels=num_features*2,
                               out_channels=num_features*4, normalize=True)
-        self.edge2 = EdgePooling(
-            in_channels=num_features*4, dropout=0.2, add_to_edge_score=0.5)
-
         self.layer3 = GCNConv(in_channels=num_features*4,
                               out_channels=num_features*8, normalize=True)
-        self.edge3 = EdgePooling(
-            in_channels=num_features*8, dropout=0.2, add_to_edge_score=0.5)
 
         self.linear = Linear(in_features=num_features*8,
                              out_features=num_features*16)
@@ -33,14 +28,10 @@ class DrugClassificationModel(Module):
             in_features=num_features*16, out_features=num_labels)
 
     def forward(self, v, edges, batch):
+        v = self.initial(v, edges)
         v = F.relu(self.layer1(v, edges))
-        v, edges, batch, _ = self.edge1(v, edges, batch)
-
         v = F.relu(self.layer2(v, edges))
-        v, edges, batch, _ = self.edge2(v, edges, batch)
-
         v = F.relu(self.layer3(v, edges))
-        v, edges, batch, _ = self.edge3(v, edges, batch)
 
         v1 = global_mean_pool(v, batch)
         v2 = global_max_pool(v, batch)
@@ -111,7 +102,7 @@ class GraphClassificationModel(Module):
         if self.category == 'binary' or self.category == 'multilabel':
             return v, F.sigmoid(v)
         else:
-            return v, F.softmax(v)
+            return v, F.softmax(v, dim=1)
 
 
 class NodeClassificationModel(Module):
