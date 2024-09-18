@@ -71,7 +71,7 @@ def training_loop():
                 "Learning Rate": optimizer.param_groups[0]['lr']
             })
 
-            if (epoch+1) % 5 == 0:
+            if (epoch+1) % 3 == 0:
                 path = f"Initial_Training/tokenizers/{task}/model{epoch+1}.pth"
 
                 torch.save(model.encoder.state_dict(), path)
@@ -106,6 +106,12 @@ if __name__ == '__main__':
         # Used 20% of the dataset for embeddings.
         train_set, _ = train_test_split(dataset, test_size=0.80)
         train_set, test_set = train_test_split(dataset, test_size=0.20)
+        encoder = NeuroGraphTokenizer(in_features=dataset.num_features)
+    elif task == 'neuro_gender':
+        dataset = NeuroGraphDataset(root=neuro_path, name='HCPGender')
+        dataset = dataset.shuffle()
+
+        train_set, test_set = train_test_split(dataset, test_size=0.25)
         encoder = NeuroGraphTokenizer(in_features=dataset.num_features)
 
     train_loader = DataLoader(train_set, **params)

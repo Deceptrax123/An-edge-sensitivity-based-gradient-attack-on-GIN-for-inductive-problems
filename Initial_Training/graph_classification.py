@@ -256,7 +256,24 @@ if __name__ == '__main__':
                                          category=category)
         model.load_state_dict(torch.load(
             "Initial_Training/tokenizers/neurograph/model10.pth", weights_only=False), strict=False)
+    elif task=='neuro_gender':
+        dataset = NeuroGraphDataset(root=neuro_path, name='HCPGender')
+        dataset = dataset.shuffle()
+        train_ratio = 0.75
+        val_ratio = 0.15
+        test_ratio = 0.10
+        train_set, test_set = train_test_split(
+            dataset, test_size=1-train_ratio)
+        val_set, test_set = train_test_split(
+            test_set, test_size=test_ratio/(test_ratio+val_ratio))
 
+        num_labels = 7
+        category = 'multiclass'
+
+        model = GraphClassificationModel(num_features=dataset[0].num_node_features, num_labels=num_labels,
+                                         category=category)
+        model.load_state_dict(torch.load(
+            "Initial_Training/tokenizers/neurograph/model10.pth", weights_only=False), strict=False)
     # Loaders
     train_loader = DataLoader(train_set, **params)
     test_loader = DataLoader(test_set, **params)
