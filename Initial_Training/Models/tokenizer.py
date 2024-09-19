@@ -25,6 +25,27 @@ class DrugTokenizer(Module):
         return self.conv_mu(x, edge_index), self.conv_std(x, edge_index)
 
 
+class NeuroGenderTokenizer(Module):
+    def __init__(self, in_features):
+        super(NeuroGenderTokenizer, self).__init__()
+
+        self.layer1 = GCNConv(
+            in_channels=in_features, out_channels=1024, normalize=True)
+        self.layer2 = GCNConv(
+            in_channels=1024, out_channels=2000, normalize=True)
+
+        self.conv_mu = GCNConv(in_channels=2000,
+                               out_channels=1024)
+        self.conv_std = GCNConv(in_channels=2000,
+                                out_channels=1024)
+
+    def forward(self, v, edge_index):
+        x = self.layer1(v, edge_index).relu()
+        x = self.layer2(x, edge_index).relu()
+
+        return self.conv_mu(x, edge_index), self.conv_std(x, edge_index)
+
+
 class NeuroGraphTokenizer(Module):
     def __init__(self, in_features):
         super(NeuroGraphTokenizer, self).__init__()

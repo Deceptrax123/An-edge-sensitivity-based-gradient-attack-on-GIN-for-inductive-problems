@@ -2,7 +2,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.graphgym import init_weights
 from torch_geometric.nn import VGAE
 from torch_geometric.datasets import ZINC, NeuroGraphDataset
-from Models.tokenizer import DrugTokenizer, NeuroGraphTokenizer
+from Models.tokenizer import DrugTokenizer, NeuroGraphTokenizer, NeuroGenderTokenizer
 from sklearn.model_selection import train_test_split
 from dotenv import load_dotenv
 import torch
@@ -112,7 +112,7 @@ if __name__ == '__main__':
         dataset = dataset.shuffle()
 
         train_set, test_set = train_test_split(dataset, test_size=0.25)
-        encoder = NeuroGraphTokenizer(in_features=dataset.num_features)
+        encoder = NeuroGenderTokenizer(in_features=dataset.num_features)
 
     train_loader = DataLoader(train_set, **params)
     test_loader = DataLoader(test_set, **params)
