@@ -1,29 +1,26 @@
 from torch.nn import Module
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv,ChebConv
 import torch.nn.functional as F
+
 
 
 class DrugTokenizer(Module):
     def __init__(self, in_features):
         super(DrugTokenizer, self).__init__()
 
-        self.layer1 = GCNConv(
-            in_channels=in_features, out_channels=128, normalize=True)
-        self.layer2 = GCNConv(
-            in_channels=128, out_channels=256, normalize=True)
-        self.layer3 = GCNConv(
-            in_channels=256, out_channels=512, normalize=True)
-
-        self.conv_mu = GCNConv(in_channels=512, out_channels=256)
-        self.conv_std = GCNConv(in_channels=512, out_channels=256)
+        self.gcn1 = ChebConv(in_channels=in_features,
+                             out_channels=128, normalization='sym', K=3)
+        self.gcn2 = ChebConv(
+            in_channels=128, out_channels=256, normalization='sym', K=3)
+        self.gcn3 = ChebConv(
+            in_channels=256, out_channels=512, normalization='sym', K=3)
 
     def forward(self, v, edge_index):
-        x = self.layer1(v, edge_index).relu()
-        x = self.layer2(x, edge_index).relu()
-        x = self.layer3(x, edge_index).relu()
+        x = self.gcn1(v, edge_index).relu()
+        x = self.gcn2(x, edge_index).relu()
+        x = self.gcn3(x, edge_index).relu()
 
-        return self.conv_mu(x, edge_index), self.conv_std(x, edge_index)
-
+        return x
 
 class NeuroGenderTokenizer(Module):
     def __init__(self, in_features):
