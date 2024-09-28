@@ -28,6 +28,12 @@ def unit_vector(z):
 
 def perform_attack():
     # Attack the model(edges) and features
+    epoch_acc = 0
+    epoch_prec = 0
+    epoch_rec = 0
+    epoch_auc = 0
+    epoch_f1 = 0
+    epoch_auc = 0
 
     for step, graphs in enumerate(test_loader):
         _, _, z = embedder.encode(graphs.x, edges=graphs.edge_index)
@@ -61,9 +67,26 @@ def perform_attack():
         adj_y2.retain_grad()
 
         gradient_adj = adj_x.grad+adj_y1.grad+adj_y2.grad
+        mean_grad = torch.mean(gradient_adj)
 
-        print(gradient_adj)
-        break
+        adversarial_matrix = torch.where(gradient_adj > mean_grad, 1, 0)
+        adversarial_sparse, _ = dense_to_sparse(adversarial_matrix)
+
+        # Pass into classifier
+        _, predictions = model(
+            graphs.x, edges=adversarial_sparse, batch=graphs.batch)
+        target_col = graphs.y.view(graphs.y.size(0), 1)
+
+        acc, f1, prec, rec, auc = classification_binary_metrics(
+            predictions, target_col.float())
+        epoch_acc += acc.item()
+        epoch_prec += prec.item()
+        epoch_f1 += f1.item()
+        epoch_rec += rec.item()
+        epoch_auc += auc.item()
+
+    return epoch_acc/(step+1), epoch_prec/(step+1), epoch_rec/(step+1), epoch_f1/(step+1), \
+        epoch_auc/(step+1)
 
 
 if __name__ == '__main__':
@@ -81,18 +104,23 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_set, **params)
 
     r_enc = GCNEncoder()
-    r_enc.load_state_dict(torch.load(
-        os.getenv("zinc_weights"), weights_only=True))
-
-    embedder = GAE(encoder=r_enc)
-
     r_enc.eval()
 
     model = DrugClassificationModel(num_labels=1, encoder=r_enc)
     model.load_state_dict(torch.load(
-        os.getenv("graph_weights"), weights_only=True))
+        os.getenv("graph_weights"), weights_only=True), strict=False)
+    model.eval()
+
+    embedder = GAE(encoder=model.nn.gcn_enc)
 
     LAMBDA = 0.4
     information_loss = InfoNCELoss(reduction=True)
 
-    perform_attack()
+    test_acc, test_prec, test_rec, test_f1, test_auc = perform_attack()
+
+    print("------------Peformance post Attack-------------")
+    print(f"Test Accuracy: {test_acc}")
+    print(f"Test Precision: {test_prec}")
+    print(f"Test Recall: {test_rec}")
+    print(f"Test F1: {test_f1}")
+    print(f"Test AUC: {test_auc}")
