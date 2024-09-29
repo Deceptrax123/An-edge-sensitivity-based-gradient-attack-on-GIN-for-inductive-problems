@@ -94,7 +94,7 @@ if __name__ == '__main__':
     load_dotenv('.env')
 
     params = {
-        'batch_size': 1,
+        'batch_size': 128,
         'shuffle': True
     }
 
