@@ -6,17 +6,6 @@ from torch_geometric.nn import GINConv, ChebConv
 import torch.nn.functional as F
 
 
-class GaussianNoise(Module):
-    def __init__(self, shape, std=1):
-        self.noise = Variable(torch.zeros(shape))
-        self.std = std
-
-    def forward(self):
-        self.noise.data.normal_(0, std=self.std)
-
-        return self.noise
-
-
 class GCNEncoderNoise(Module):
     def __init__(self, noise_shape1, noise_shape2, noise_shape3, std):
         super(GCNEncoderNoise, self).__init__()
@@ -24,23 +13,18 @@ class GCNEncoderNoise(Module):
         self.gcn2 = ChebConv(in_channels=128, out_channels=256, K=3)
         self.gcn3 = ChebConv(in_channels=256, out_channels=512, K=3)
 
-        self.gaussian1 = GaussianNoise(shape=noise_shape1, std=std)
-        self.gaussian2 = GaussianNoise(shape=noise_shape2, std=std)
-        self.gaussian3 = GaussianNoise(shape=noise_shape3, std=std)
-
     def forward(self, v, edges):
-        B1 = self.gaussian1()
-        B2 = self.gaussian2()
-        B3 = self.gaussian3()
-
         x1 = F.relu(self.gcn1(v, edge_index=edges))
-        x1 = torch.add(x1, B1)
+        B1 = torch.randn(x1.size())
+        x1 = torch.mul(x1, B1)
 
         x2 = F.relu(self.gcn2(x1, edge_index=edges))
-        x2 = torch.add(x2, B2)
+        B2 = torch.randn(x2.size())
+        x2 = torch.mul(x2, B2)
 
         x3 = F.relu(self.gcn3(x2, edge_index=edges))
-        x3 = torch.add(x3, B3)
+        B3 = torch.randn(x3.size())
+        x3 = torch.mul(x3, B3)
 
         return x1, x2, x3
 
