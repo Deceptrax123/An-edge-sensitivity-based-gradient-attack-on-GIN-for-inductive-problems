@@ -1,17 +1,115 @@
 from torch_geometric.loader import DataLoader
 from torch_geometric.graphgym import init_weights
+from torch_geometric.utils import to_dense_adj, dropout_adj, dense_to_sparse, erdos_renyi_graph
+from torch_geometric.utils import get_laplacian
+from torch_geometric.datasets.graph_generator import ERGraph
 from torch_geometric.nn import GAE
 from Defense.HIV.hiv_dataset import HIVDataset
 import torch
 from Defense.Models.isomorphism import GCNEncoder, GCNEncoderNoise
 from Defense.Models.Model import DrugClassificationModel
+from Attack.contrastive_loss import InfoNCELoss
 from Attack.metrics import classification_binary_metrics
 from torch.utils.data import ConcatDataset
 from torch import nn
 from dotenv import load_dotenv
 import os
 import wandb
+import math
 import gc
+
+
+def unit_vector(z):
+    u1 = torch.randn(size=(1, z.size(1)))
+    u2 = torch.randn(size=(1, z.size(1)))
+    r1 = torch.sum(u1**2)**0.5
+    r2 = torch.sum(u2**2)**0.5
+
+    return u1/r1, u2/r2
+
+
+def attack(graphs):
+    _, _, z = embedder.encode(graphs.x, edges=graphs.edge_index)
+    zcap1, zcap2 = unit_vector(z)
+    epsilon1, epsilon2 = torch.normal(
+        0, torch.std(z), torch.normal(0, torch.std(z)))
+
+    z1 = torch.add(z, torch.mul(epsilon1, zcap1))
+    z2 = torch.add(z, torch.mul(epsilon2, zcap2))
+
+    adj_y = torch.sigmoid(torch.matmul(z, z.t()))
+    adj_y1 = torch.sigmoid(torch.matmul(z1, z1.t()))
+    adj_y2 = torch.sigmoid(torch.matmul(z2, z2.t()))
+
+    adj_y1 = torch.where(adj_y1 > 0.5, 1.0, 0.0)
+    adj_y2 = torch.where(adj_y2 > 0.5, 1.0, 0.0)
+
+    adj_x = to_dense_adj(edge_index=graphs.edge_index,
+                         max_num_nodes=graphs.x.size(0))
+
+    adj_x.requires_grad = True
+    adj_y1.requires_grad = True
+    adj_y2.requires_grad = True
+
+    loss = embedder.recon_loss(z, pos_edge_index=graphs.edge_index)+(LAMBDA*information_loss(
+        adj_y, adj_y1, adj_y2, adj_x))
+    loss.backward()
+
+    adj_x.retain_grad()
+    adj_y1.retain_grad()
+    adj_y2.retain_grad()
+
+    gradient_adj = adj_x.grad+adj_y1.grad+adj_y2.grad
+    mean_grad = torch.mean(gradient_adj)
+
+    adversarial_matrix = torch.where(gradient_adj > mean_grad, 1, 0)
+    adversarial_sparse, _ = dense_to_sparse(adversarial_matrix)
+
+    return adversarial_sparse, adversarial_matrix
+
+
+def attack_chance():
+    rand_number = torch.rand(1)*math.pi
+
+    return rand_number
+
+
+def train():
+    epoch_loss = 0
+    epoch_acc = 0
+    epoch_prec = 0
+    epoch_rec = 0
+    epoch_auc = 0
+    epoch_f1 = 0
+    epoch_auc = 0
+
+    for step, graphs in enumerate(train_loader):
+        attack_prob = attack_chance()
+
+        graph_edges = graphs.edge_index
+        if attack_prob >= 0.5:
+            graph_edges, adv_matrix = attack()
+
+            # Generate Random Graph
+            er_graph = erdos_renyi_graph(
+                num_nodes=graphs.x.size(0), edge_prob=0.5)
+
+            # Laplacian of each graph
+            adversarial_laplacian, adv_weight = get_laplacian(graph_edges)
+            er_laplacian, er_weight = get_laplacian(er_graph)
+
+            # Eigen distribution
+            perturbed_eigen_vals, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
+                adversarial_laplacian, edge_attr=adv_weight))
+            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+                er_laplacian, edge_attr=er_weight))
+
+            # Similarity between eigen distributions
+
+
+def attack_loop():
+    for epoch in range(NUM_EPOCHS):
+        model_attack.train()
 
 
 if __name__ == '__main__':
@@ -63,6 +161,22 @@ if __name__ == '__main__':
     model = DrugClassificationModel(num_labels=1, encoder=r_enc_normal)
     model.load_state_dict(torch.load(
         os.getenv("graph_weights"), weights_only=True), strict=False)
+    model.eval()
 
     embedder = model.nn.gcn_enc
     autoencoder = GAE(encoder=embedder)
+
+    # Attack robust encoder
+    r_enc_attack = GCNEncoderNoise()
+    model_attack = DrugClassificationModel(num_labels=1, encoder=r_enc_attack)
+    model_attack.load_state_dict(torch.load(
+        os.getenv("graph_weights"), weights_only=True), strice=False)
+
+    LAMBDA = 4e-1
+    LR = 2e-4
+    BETAS = (0.9, 0.999)
+    NUM_EPOCHS = 1000
+    information_loss = InfoNCELoss()
+    loss_trainable = nn.BCEWithLogitsLoss()
+
+    optimizer = torch.optim.Adam(model_attack.parameters(), lr=LR, betas=BETAS)

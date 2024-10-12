@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 
 class GCNEncoderNoise(Module):
-    def __init__(self, noise_shape1, noise_shape2, noise_shape3, std):
+    def __init__(self):
         super(GCNEncoderNoise, self).__init__()
         self.gcn1 = ChebConv(in_channels=86, out_channels=128, K=3)
         self.gcn2 = ChebConv(in_channels=128, out_channels=256, K=3)
