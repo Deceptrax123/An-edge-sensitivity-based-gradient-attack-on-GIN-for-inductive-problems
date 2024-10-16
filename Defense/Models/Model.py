@@ -39,8 +39,8 @@ class DrugClassificationModel(Module):
 
         self.nn = GraphIsomorphismNetwork(encoder=encoder)
         self.linear1 = Linear(in_features=512, out_features=256)
-        self.attack_attention = Linear(in_features=256, out_features=3)
-        self.classifier = Linear(in_features=3, out_features=num_labels)
+        self.attack_attention = Linear(in_features=4, out_features=256)
+        self.classifier = Linear(in_features=256, out_features=num_labels)
 
         self.relu = ReLU()
         self.bn = BatchNorm1d(num_features=256)
@@ -53,9 +53,9 @@ class DrugClassificationModel(Module):
         v = self.bn(v)
         v = self.relu(v)
 
-        v = self.attack_attention(v)
-        v = torch.mul(attack_vector, v)
+        attack_projected = self.attack_attention(attack_vector)
+        attack_attention = torch.mul(attack_projected, v)
 
-        v = self.classifier(v)
+        v = self.classifier(attack_attention)
 
         return v, F.sigmoid(v)

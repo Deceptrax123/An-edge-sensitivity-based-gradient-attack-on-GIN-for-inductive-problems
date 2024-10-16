@@ -1,12 +1,12 @@
 from torch_geometric.loader import DataLoader
-from torch_geometric.graphgym import init_weights
-from torch_geometric.utils import to_dense_adj, dropout_adj, dense_to_sparse, erdos_renyi_graph
+from torch_geometric.utils import to_dense_adj, dense_to_sparse, erdos_renyi_graph
 from torch_geometric.utils import get_laplacian
-from torch_geometric.datasets.graph_generator import ERGraph
 from torch_geometric.nn import GAE
 from Defense.HIV.hiv_dataset import HIVDataset
 import torch
+import numpy as np
 from Defense.Models.isomorphism import GCNEncoder, GCNEncoderNoise
+from Initial_Training.Models.Model import DrugClassificationModel as OriginalClassifier
 from Defense.Models.Model import DrugClassificationModel
 from Attack.contrastive_loss import InfoNCELoss
 from Attack.metrics import classification_binary_metrics
@@ -32,7 +32,7 @@ def attack(graphs):
     _, _, z = autoencoder.encode(graphs.x, edges=graphs.edge_index)
     zcap1, zcap2 = unit_vector(z)
     epsilon1, epsilon2 = torch.normal(
-        0, torch.std(z), torch.normal(0, torch.std(z)))
+        0, torch.std(z)), torch.normal(0, torch.std(z))
 
     z1 = torch.add(z, torch.mul(epsilon1, zcap1))
     z2 = torch.add(z, torch.mul(epsilon2, zcap2))
@@ -91,7 +91,7 @@ def train():
 
         graph_edges = graphs.edge_index
         if attack_prob >= 0.5:
-            graph_edges, adv_matrix = attack()
+            graph_edges, adv_matrix = attack(graphs)
 
             # Laplacian of each graph
             adversarial_laplacian, adv_weight = get_laplacian(graph_edges)
@@ -105,36 +105,35 @@ def train():
 
             # Similarity between eigen distributions
             eigen_value_similarity = torch.cosine_similarity(
-                perturbed_eigen_vals, er_eigen_vals)
-            eigen_distribution_similarity = torch.cosine_similarity(
-                perturbed_eigen_vecs, er_eigen_vecs)
+                perturbed_eigen_vals.real, er_eigen_vals.real)
+            eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
+                perturbed_eigen_vecs.real, er_eigen_vecs.real))
+            # print(eigen_distribution_similarity)
 
             acti_vector = torch.tensor(
                 [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 1])
         else:
-            er_graph = erdos_renyi_graph(
-                num_nodes=graphs.x.size(0), edge_prob=0.5)
             norm_laplacian, norm_weight = get_laplacian(graph_edges)
             er_laplacian, er_weight = get_laplacian(er_graph)
 
             norm_eigen_vals, norm_eigen_vecs = torch.linalg.eig(
-                to_dense_adj(norm_laplacian, norm_weight))
+                to_dense_adj(norm_laplacian, edge_attr=norm_weight))
             er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 er_laplacian, edge_attr=er_weight))
 
             eigen_value_similarity = torch.cosine_similarity(
-                norm_eigen_vals, er_eigen_vals)
-            eigen_distribution_similarity = torch.cosine_similarity(
-                norm_eigen_vecs, perturbed_eigen_vecs)
-
+                norm_eigen_vals.real, er_eigen_vals.real)
+            eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
+                norm_eigen_vecs.real, er_eigen_vecs.real))
+            # print(eigen_distribution_similarity)
             acti_vector = torch.tensor(
                 [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 0])
 
-        logits, predictions = model(
+        logits, predictions = model_attack(
             graphs.x, attack_vector=acti_vector, edges=graph_edges, batch=graphs.batch)
         target_col = graphs.y.view(graphs.y.size(0), 1)
 
-        model.zero_grad()
+        model_attack.zero_grad()
         loss = loss_trainable(logits, target_col.float())
 
         loss.backward()
@@ -187,15 +186,13 @@ def test():
 
             # Similarity between eigen distributions
             eigen_value_similarity = torch.cosine_similarity(
-                perturbed_eigen_vals, er_eigen_vals)
-            eigen_distribution_similarity = torch.cosine_similarity(
-                perturbed_eigen_vecs, er_eigen_vecs)
+                perturbed_eigen_vals.real, er_eigen_vals.real)
+            eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
+                perturbed_eigen_vecs.real, er_eigen_vecs.real))
 
             acti_vector = torch.tensor(
-                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 1])
+                np.array([eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 1]))
         else:
-            er_graph = erdos_renyi_graph(
-                num_nodes=graphs.x.size(0), edge_prob=0.5)
             norm_laplacian, norm_weight = get_laplacian(graph_edges)
             er_laplacian, er_weight = get_laplacian(er_graph)
 
@@ -205,12 +202,12 @@ def test():
                 er_laplacian, edge_attr=er_weight))
 
             eigen_value_similarity = torch.cosine_similarity(
-                norm_eigen_vals, er_eigen_vals)
-            eigen_distribution_similarity = torch.cosine_similarity(
-                norm_eigen_vecs, perturbed_eigen_vecs)
+                norm_eigen_vals.real, er_eigen_vals.real)
+            eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
+                norm_eigen_vecs.real, er_eigen_vecs.real))
 
             acti_vector = torch.tensor(
-                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 0])
+                np.array([eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 0]))
 
         logits, predictions = model_attack(
             graphs.x, attack_vector=acti_vector, edges=graph_edges, batch=graphs.batch)
@@ -238,11 +235,11 @@ def test():
 def attack_loop():
     for epoch in range(NUM_EPOCHS):
         model_attack.train()
-        train_attack_chance, train_loss, train_acc, train_prec, train_rec, train_f1, train_auc = train()
+        train_loss, train_acc, train_prec, train_rec, train_f1, train_auc = train()
 
         model_attack.eval()
         with torch.no_grad():
-            test_attack_chance, test_loss, test_acc, test_prec, test_rec, test_f1, test_auc = test()
+            test_loss, test_acc, test_prec, test_rec, test_f1, test_auc = test()
 
             print(f"Epoch: {epoch+1}")
             print("----------Train Metrics------------")
@@ -273,8 +270,6 @@ def attack_loop():
                 "Test Recall": test_rec,
                 "Test F1": test_f1,
                 "Test AUC": test_auc,
-                "Train Attack Simulation": train_attack_chance,
-                "Test Attack Simulation": test_attack_chance
             })
 
             if (epoch+1) % 10 == 0:
@@ -329,7 +324,7 @@ if __name__ == '__main__':
         })
 
     r_enc_normal = GCNEncoder()
-    model = DrugClassificationModel(num_labels=1, encoder=r_enc_normal)
+    model = OriginalClassifier(num_labels=1, encoder=r_enc_normal)
     model.load_state_dict(torch.load(
         os.getenv("graph_weights"), weights_only=True), strict=False)
     model.eval()
@@ -341,7 +336,7 @@ if __name__ == '__main__':
     r_enc_attack = GCNEncoderNoise()
     model_attack = DrugClassificationModel(num_labels=1, encoder=r_enc_attack)
     model_attack.load_state_dict(torch.load(
-        os.getenv("graph_weights"), weights_only=True), strice=False)
+        os.getenv("graph_weights"), weights_only=True), strict=False)
 
     LAMBDA = 4e-1
     LR = 2e-4
