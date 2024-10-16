@@ -29,7 +29,7 @@ def unit_vector(z):
 
 
 def attack(graphs):
-    _, _, z = embedder.encode(graphs.x, edges=graphs.edge_index)
+    _, _, z = autoencoder.encode(graphs.x, edges=graphs.edge_index)
     zcap1, zcap2 = unit_vector(z)
     epsilon1, epsilon2 = torch.normal(
         0, torch.std(z), torch.normal(0, torch.std(z)))
@@ -51,7 +51,7 @@ def attack(graphs):
     adj_y1.requires_grad = True
     adj_y2.requires_grad = True
 
-    loss = embedder.recon_loss(z, pos_edge_index=graphs.edge_index)+(LAMBDA*information_loss(
+    loss = autoencoder.recon_loss(z, pos_edge_index=graphs.edge_index)+(LAMBDA*information_loss(
         adj_y, adj_y1, adj_y2, adj_x))
     loss.backward()
 
@@ -69,7 +69,7 @@ def attack(graphs):
 
 
 def attack_chance():
-    rand_number = torch.rand(1)*math.pi
+    rand_number = torch.sin(torch.rand(1)*math.pi)
 
     return rand_number
 
@@ -85,14 +85,13 @@ def train():
 
     for step, graphs in enumerate(train_loader):
         attack_prob = attack_chance()
+        # Generate Random Graph
+        er_graph = erdos_renyi_graph(
+            num_nodes=graphs.x.size(0), edge_prob=0.5)
 
         graph_edges = graphs.edge_index
         if attack_prob >= 0.5:
             graph_edges, adv_matrix = attack()
-
-            # Generate Random Graph
-            er_graph = erdos_renyi_graph(
-                num_nodes=graphs.x.size(0), edge_prob=0.5)
 
             # Laplacian of each graph
             adversarial_laplacian, adv_weight = get_laplacian(graph_edges)
@@ -105,11 +104,183 @@ def train():
                 er_laplacian, edge_attr=er_weight))
 
             # Similarity between eigen distributions
+            eigen_value_similarity = torch.cosine_similarity(
+                perturbed_eigen_vals, er_eigen_vals)
+            eigen_distribution_similarity = torch.cosine_similarity(
+                perturbed_eigen_vecs, er_eigen_vecs)
+
+            acti_vector = torch.tensor(
+                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 1])
+        else:
+            er_graph = erdos_renyi_graph(
+                num_nodes=graphs.x.size(0), edge_prob=0.5)
+            norm_laplacian, norm_weight = get_laplacian(graph_edges)
+            er_laplacian, er_weight = get_laplacian(er_graph)
+
+            norm_eigen_vals, norm_eigen_vecs = torch.linalg.eig(
+                to_dense_adj(norm_laplacian, norm_weight))
+            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+                er_laplacian, edge_attr=er_weight))
+
+            eigen_value_similarity = torch.cosine_similarity(
+                norm_eigen_vals, er_eigen_vals)
+            eigen_distribution_similarity = torch.cosine_similarity(
+                norm_eigen_vecs, perturbed_eigen_vecs)
+
+            acti_vector = torch.tensor(
+                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 0])
+
+        logits, predictions = model(
+            graphs.x, attack_vector=acti_vector, edges=graph_edges, batch=graphs.batch)
+        target_col = graphs.y.view(graphs.y.size(0), 1)
+
+        model.zero_grad()
+        loss = loss_trainable(logits, target_col.float())
+
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+        acc, f1, prec, rec, auc = classification_binary_metrics(
+            predictions, target_col)
+
+        epoch_acc += acc.item()
+        epoch_prec += prec.item()
+        epoch_f1 += f1.item()
+        epoch_rec += rec.item()
+        epoch_auc += auc.item()
+
+        del graphs, predictions, logits, graph_edges, er_graph, er_laplacian
+        gc.collect()
+
+    return epoch_loss/(step+1), epoch_acc/(step+1), epoch_prec/(step+1), epoch_rec/(step+1), epoch_f1/(step+1), epoch_auc/(step+1)
+
+
+def test():
+    epoch_loss = 0
+    epoch_acc = 0
+    epoch_prec = 0
+    epoch_rec = 0
+    epoch_auc = 0
+    epoch_f1 = 0
+    epoch_auc = 0
+
+    for step, graphs in enumerate(test_loader):
+        attack_prob = attack_chance()
+        # Generate Random Graph
+        er_graph = erdos_renyi_graph(
+            num_nodes=graphs.x.size(0), edge_prob=0.5)
+
+        graph_edges = graphs.edge_index
+        if attack_prob >= 0.5:
+            graph_edges, adv_matrix = attack()
+
+            # Laplacian of each graph
+            adversarial_laplacian, adv_weight = get_laplacian(graph_edges)
+            er_laplacian, er_weight = get_laplacian(er_graph)
+
+            # Eigen distribution
+            perturbed_eigen_vals, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
+                adversarial_laplacian, edge_attr=adv_weight))
+            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+                er_laplacian, edge_attr=er_weight))
+
+            # Similarity between eigen distributions
+            eigen_value_similarity = torch.cosine_similarity(
+                perturbed_eigen_vals, er_eigen_vals)
+            eigen_distribution_similarity = torch.cosine_similarity(
+                perturbed_eigen_vecs, er_eigen_vecs)
+
+            acti_vector = torch.tensor(
+                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 1])
+        else:
+            er_graph = erdos_renyi_graph(
+                num_nodes=graphs.x.size(0), edge_prob=0.5)
+            norm_laplacian, norm_weight = get_laplacian(graph_edges)
+            er_laplacian, er_weight = get_laplacian(er_graph)
+
+            norm_eigen_vals, norm_eigen_vecs = torch.linalg.eig(
+                to_dense_adj(norm_laplacian, norm_weight))
+            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+                er_laplacian, edge_attr=er_weight))
+
+            eigen_value_similarity = torch.cosine_similarity(
+                norm_eigen_vals, er_eigen_vals)
+            eigen_distribution_similarity = torch.cosine_similarity(
+                norm_eigen_vecs, perturbed_eigen_vecs)
+
+            acti_vector = torch.tensor(
+                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 0])
+
+        logits, predictions = model_attack(
+            graphs.x, attack_vector=acti_vector, edges=graph_edges, batch=graphs.batch)
+        target_col = graphs.y.view(graphs.y.size(0), 1)
+
+        loss = loss_trainable(logits, target_col.float())
+
+        epoch_loss += loss.item()
+
+        acc, f1, prec, rec, auc = classification_binary_metrics(
+            predictions, target_col)
+        epoch_acc += acc.item()
+        epoch_prec += prec.item()
+        epoch_f1 += f1.item()
+        epoch_rec += rec.item()
+        epoch_auc += auc.item()
+
+        del graphs, predictions, logits
+        gc.collect()
+
+    return epoch_loss/(step+1), epoch_acc/(step+1), epoch_prec/(step+1), epoch_rec/(step+1), epoch_f1/(step+1), \
+        epoch_auc/(step+1)
 
 
 def attack_loop():
     for epoch in range(NUM_EPOCHS):
         model_attack.train()
+        train_attack_chance, train_loss, train_acc, train_prec, train_rec, train_f1, train_auc = train()
+
+        model_attack.eval()
+        with torch.no_grad():
+            test_attack_chance, test_loss, test_acc, test_prec, test_rec, test_f1, test_auc = test()
+
+            print(f"Epoch: {epoch+1}")
+            print("----------Train Metrics------------")
+            print(f"Train Loss: {train_loss}")
+            print(f"Train Accuracy: {train_acc}")
+            print(f"Train Precision: {train_prec}")
+            print(f"Train Recall: {train_rec}")
+            print(f"Train F1: {train_f1}")
+            print(f"Train AUC: {train_auc}")
+            print("------------Test Metrics-------------")
+            print(f"Test Loss: {test_loss}")
+            print(f"Test Accuracy: {test_acc}")
+            print(f"Test Precision: {test_prec}")
+            print(f"Test Recall: {test_rec}")
+            print(f"Test F1: {test_f1}")
+            print(f"Test AUC: {test_auc}")
+
+            wandb.log({
+                "Train Loss": train_loss,
+                "Train Accuracy": train_acc,
+                "Train Precision": train_prec,
+                "Train Recall": train_rec,
+                "Train F1": train_f1,
+                "Train AUC": train_auc,
+                "Test Loss": test_loss,
+                "Test Accuracy": test_acc,
+                "Test Precision": test_prec,
+                "Test Recall": test_rec,
+                "Test F1": test_f1,
+                "Test AUC": test_auc,
+                "Train Attack Simulation": train_attack_chance,
+                "Test Attack Simulation": test_attack_chance
+            })
+
+            if (epoch+1) % 10 == 0:
+                weights_path = f"Defense/HIV/weights/fine_tuned/model_{
+                    epoch+1}.pth"
+                torch.save(model.state_dict(), weights_path)
 
 
 if __name__ == '__main__':
@@ -143,7 +314,7 @@ if __name__ == '__main__':
     test_set = ConcatDataset([test_set1, test_set2])
 
     params = {
-        'batch_size': 256,
+        'batch_size': 64,
         'shuffle': True,
         'num_workers': 0
     }
@@ -180,3 +351,5 @@ if __name__ == '__main__':
     loss_trainable = nn.BCEWithLogitsLoss()
 
     optimizer = torch.optim.Adam(model_attack.parameters(), lr=LR, betas=BETAS)
+
+    attack_loop()
