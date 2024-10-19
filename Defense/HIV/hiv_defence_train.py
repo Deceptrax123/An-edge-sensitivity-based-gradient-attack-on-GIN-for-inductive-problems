@@ -98,36 +98,32 @@ def train():
             er_laplacian, er_weight = get_laplacian(er_graph)
 
             # Eigen distribution
-            perturbed_eigen_vals, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
+            _, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 adversarial_laplacian, edge_attr=adv_weight))
-            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+            _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 er_laplacian, edge_attr=er_weight))
 
             # Similarity between eigen distributions
-            eigen_value_similarity = torch.cosine_similarity(
-                perturbed_eigen_vals.real, er_eigen_vals.real)
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
                 perturbed_eigen_vecs.real, er_eigen_vecs.real))
             # print(eigen_distribution_similarity)
 
             acti_vector = torch.tensor(
-                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 1])
+                [eigen_distribution_similarity, 1-eigen_distribution_similarity, 1])
         else:
             norm_laplacian, norm_weight = get_laplacian(graph_edges)
             er_laplacian, er_weight = get_laplacian(er_graph)
 
-            norm_eigen_vals, norm_eigen_vecs = torch.linalg.eig(
+            _, norm_eigen_vecs = torch.linalg.eig(
                 to_dense_adj(norm_laplacian, edge_attr=norm_weight))
-            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+            _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 er_laplacian, edge_attr=er_weight))
 
-            eigen_value_similarity = torch.cosine_similarity(
-                norm_eigen_vals.real, er_eigen_vals.real)
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
                 norm_eigen_vecs.real, er_eigen_vecs.real))
             # print(eigen_distribution_similarity)
             acti_vector = torch.tensor(
-                [eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 0])
+                [eigen_distribution_similarity, 1-eigen_distribution_similarity, 0])
 
         logits, predictions = model_attack(
             graphs.x, attack_vector=acti_vector, edges=graph_edges, batch=graphs.batch)
@@ -148,6 +144,13 @@ def train():
         epoch_f1 += f1.item()
         epoch_rec += rec.item()
         epoch_auc += auc.item()
+
+        # print("Step Train Values")
+        # print("Epoch Loss: ", epoch_loss)
+        # print("Epoch Accuracy: ", epoch_acc)
+        # print("Epoch Precision: ", epoch_prec)
+        # print("Epoch F1: ", epoch_f1)
+        # print("Epoch AUC: ", epoch_auc)
 
         del graphs, predictions, logits, graph_edges, er_graph, er_laplacian
         gc.collect()
@@ -179,35 +182,31 @@ def test():
             er_laplacian, er_weight = get_laplacian(er_graph)
 
             # Eigen distribution
-            perturbed_eigen_vals, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
+            _, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 adversarial_laplacian, edge_attr=adv_weight))
-            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+            _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 er_laplacian, edge_attr=er_weight))
 
             # Similarity between eigen distributions
-            eigen_value_similarity = torch.cosine_similarity(
-                perturbed_eigen_vals.real, er_eigen_vals.real)
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
                 perturbed_eigen_vecs.real, er_eigen_vecs.real))
 
             acti_vector = torch.tensor(
-                np.array([eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 1]))
+                np.array([eigen_distribution_similarity, 1-eigen_distribution_similarity, 1]))
         else:
             norm_laplacian, norm_weight = get_laplacian(graph_edges)
             er_laplacian, er_weight = get_laplacian(er_graph)
 
-            norm_eigen_vals, norm_eigen_vecs = torch.linalg.eig(
+            _, norm_eigen_vecs = torch.linalg.eig(
                 to_dense_adj(norm_laplacian, norm_weight))
-            er_eigen_vals, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
+            _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 er_laplacian, edge_attr=er_weight))
 
-            eigen_value_similarity = torch.cosine_similarity(
-                norm_eigen_vals.real, er_eigen_vals.real)
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
                 norm_eigen_vecs.real, er_eigen_vecs.real))
 
             acti_vector = torch.tensor(
-                np.array([eigen_distribution_similarity, eigen_value_similarity, 1-eigen_distribution_similarity, 0]))
+                np.array([eigen_distribution_similarity, 1-eigen_distribution_similarity, 0]))
 
         logits, predictions = model_attack(
             graphs.x, attack_vector=acti_vector, edges=graph_edges, batch=graphs.batch)
@@ -224,6 +223,13 @@ def test():
         epoch_f1 += f1.item()
         epoch_rec += rec.item()
         epoch_auc += auc.item()
+
+        # print("Step Train Values")
+        # print("Epoch Loss: ", epoch_loss)
+        # print("Epoch Accuracy: ", epoch_acc)
+        # print("Epoch Precision: ", epoch_prec)
+        # print("Epoch F1: ", epoch_f1)
+        # print("Epoch AUC: ", epoch_auc)
 
         del graphs, predictions, logits
         gc.collect()

@@ -39,7 +39,7 @@ class DrugClassificationModel(Module):
 
         self.nn = GraphIsomorphismNetwork(encoder=encoder)
         self.linear1 = Linear(in_features=512, out_features=256)
-        self.attack_attention = Linear(in_features=4, out_features=256)
+        self.attack_attention = Linear(in_features=3, out_features=256)
         self.classifier = Linear(in_features=256, out_features=num_labels)
 
         self.relu = ReLU()
