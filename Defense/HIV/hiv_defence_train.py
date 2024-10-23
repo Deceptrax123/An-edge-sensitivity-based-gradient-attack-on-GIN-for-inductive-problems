@@ -45,7 +45,7 @@ def attack(graphs):
     adj_y2 = torch.where(adj_y2 > 0.5, 1.0, 0.0)
 
     adj_x = to_dense_adj(edge_index=graphs.edge_index,
-                         max_num_nodes=graphs.x.size(0))
+                         max_num_nodes=graphs.num_nodes)
 
     adj_x.requires_grad = True
     adj_y1.requires_grad = True
@@ -87,7 +87,7 @@ def train():
         attack_prob = attack_chance()
         # Generate Random Graph
         er_graph = erdos_renyi_graph(
-            num_nodes=graphs.x.size(0), edge_prob=0.5)
+            num_nodes=graphs.num_nodes, edge_prob=0.2)
 
         graph_edges = graphs.edge_index
         if attack_prob >= 0.5:
@@ -99,9 +99,9 @@ def train():
 
             # Eigen distribution
             _, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
-                adversarial_laplacian, edge_attr=adv_weight))
+                adversarial_laplacian, edge_attr=adv_weight, max_num_nodes=graphs.num_nodes))
             _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
-                er_laplacian, edge_attr=er_weight))
+                er_laplacian, edge_attr=er_weight, max_num_nodes=graphs.num_nodes))
 
             # Similarity between eigen distributions
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
@@ -115,9 +115,9 @@ def train():
             er_laplacian, er_weight = get_laplacian(er_graph)
 
             _, norm_eigen_vecs = torch.linalg.eig(
-                to_dense_adj(norm_laplacian, edge_attr=norm_weight))
+                to_dense_adj(norm_laplacian, edge_attr=norm_weight, max_num_nodes=graphs.num_nodes))
             _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
-                er_laplacian, edge_attr=er_weight))
+                er_laplacian, edge_attr=er_weight, max_num_nodes=graphs.num_nodes))
 
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
                 norm_eigen_vecs.real, er_eigen_vecs.real))
@@ -171,11 +171,11 @@ def test():
         attack_prob = attack_chance()
         # Generate Random Graph
         er_graph = erdos_renyi_graph(
-            num_nodes=graphs.x.size(0), edge_prob=0.5)
+            num_nodes=graphs.num_nodes, edge_prob=0.2)
 
         graph_edges = graphs.edge_index
         if attack_prob >= 0.5:
-            graph_edges, adv_matrix = attack()
+            graph_edges, adv_matrix = attack(graphs)
 
             # Laplacian of each graph
             adversarial_laplacian, adv_weight = get_laplacian(graph_edges)
@@ -183,9 +183,9 @@ def test():
 
             # Eigen distribution
             _, perturbed_eigen_vecs = torch.linalg.eig(to_dense_adj(
-                adversarial_laplacian, edge_attr=adv_weight))
+                adversarial_laplacian, edge_attr=adv_weight, max_num_nodes=graphs.num_nodes))
             _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
-                er_laplacian, edge_attr=er_weight))
+                er_laplacian, edge_attr=er_weight, max_num_nodes=graphs.num_nodes))
 
             # Similarity between eigen distributions
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
@@ -198,9 +198,9 @@ def test():
             er_laplacian, er_weight = get_laplacian(er_graph)
 
             _, norm_eigen_vecs = torch.linalg.eig(
-                to_dense_adj(norm_laplacian, norm_weight))
+                to_dense_adj(norm_laplacian, norm_weight, max_num_nodes=graphs.num_nodes))
             _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
-                er_laplacian, edge_attr=er_weight))
+                er_laplacian, edge_attr=er_weight, max_num_nodes=graphs.num_nodes))
 
             eigen_distribution_similarity = torch.mean(torch.cosine_similarity(
                 norm_eigen_vecs.real, er_eigen_vecs.real))
