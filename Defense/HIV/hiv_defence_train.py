@@ -198,7 +198,7 @@ def test():
             er_laplacian, er_weight = get_laplacian(er_graph)
 
             _, norm_eigen_vecs = torch.linalg.eig(
-                to_dense_adj(norm_laplacian, norm_weight, max_num_nodes=graphs.num_nodes))
+                to_dense_adj(norm_laplacian, edge_attr=norm_weight, max_num_nodes=graphs.num_nodes))
             _, er_eigen_vecs = torch.linalg.eig(to_dense_adj(
                 er_laplacian, edge_attr=er_weight, max_num_nodes=graphs.num_nodes))
 
