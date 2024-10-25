@@ -192,7 +192,7 @@ def test():
                 perturbed_eigen_vecs.real, er_eigen_vecs.real))
 
             acti_vector = torch.tensor(
-                np.array([eigen_distribution_similarity, 1-eigen_distribution_similarity, 1]))
+                [eigen_distribution_similarity, 1-eigen_distribution_similarity, 1])
         else:
             norm_laplacian, norm_weight = get_laplacian(graph_edges)
             er_laplacian, er_weight = get_laplacian(er_graph)
@@ -206,7 +206,7 @@ def test():
                 norm_eigen_vecs.real, er_eigen_vecs.real))
 
             acti_vector = torch.tensor(
-                np.array([eigen_distribution_similarity, 1-eigen_distribution_similarity, 0]))
+                [eigen_distribution_similarity, 1-eigen_distribution_similarity, 0])
 
         logits, predictions = model_attack(
             graphs.x, attack_vector=acti_vector, edges=graph_edges, batch=graphs.batch)
@@ -244,44 +244,44 @@ def attack_loop():
         train_loss, train_acc, train_prec, train_rec, train_f1, train_auc = train()
 
         model_attack.eval()
-        with torch.no_grad():
-            test_loss, test_acc, test_prec, test_rec, test_f1, test_auc = test()
 
-            print(f"Epoch: {epoch+1}")
-            print("----------Train Metrics------------")
-            print(f"Train Loss: {train_loss}")
-            print(f"Train Accuracy: {train_acc}")
-            print(f"Train Precision: {train_prec}")
-            print(f"Train Recall: {train_rec}")
-            print(f"Train F1: {train_f1}")
-            print(f"Train AUC: {train_auc}")
-            print("------------Test Metrics-------------")
-            print(f"Test Loss: {test_loss}")
-            print(f"Test Accuracy: {test_acc}")
-            print(f"Test Precision: {test_prec}")
-            print(f"Test Recall: {test_rec}")
-            print(f"Test F1: {test_f1}")
-            print(f"Test AUC: {test_auc}")
+        test_loss, test_acc, test_prec, test_rec, test_f1, test_auc = test()
 
-            wandb.log({
-                "Train Loss": train_loss,
-                "Train Accuracy": train_acc,
-                "Train Precision": train_prec,
-                "Train Recall": train_rec,
-                "Train F1": train_f1,
-                "Train AUC": train_auc,
-                "Test Loss": test_loss,
-                "Test Accuracy": test_acc,
-                "Test Precision": test_prec,
-                "Test Recall": test_rec,
-                "Test F1": test_f1,
-                "Test AUC": test_auc,
-            })
+        print(f"Epoch: {epoch+1}")
+        print("----------Train Metrics------------")
+        print(f"Train Loss: {train_loss}")
+        print(f"Train Accuracy: {train_acc}")
+        print(f"Train Precision: {train_prec}")
+        print(f"Train Recall: {train_rec}")
+        print(f"Train F1: {train_f1}")
+        print(f"Train AUC: {train_auc}")
+        print("------------Test Metrics-------------")
+        print(f"Test Loss: {test_loss}")
+        print(f"Test Accuracy: {test_acc}")
+        print(f"Test Precision: {test_prec}")
+        print(f"Test Recall: {test_rec}")
+        print(f"Test F1: {test_f1}")
+        print(f"Test AUC: {test_auc}")
 
-            if (epoch+1) % 10 == 0:
-                weights_path = f"Defense/HIV/weights/fine_tuned/model_{
-                    epoch+1}.pth"
-                torch.save(model.state_dict(), weights_path)
+        wandb.log({
+            "Train Loss": train_loss,
+            "Train Accuracy": train_acc,
+            "Train Precision": train_prec,
+            "Train Recall": train_rec,
+            "Train F1": train_f1,
+            "Train AUC": train_auc,
+            "Test Loss": test_loss,
+            "Test Accuracy": test_acc,
+            "Test Precision": test_prec,
+            "Test Recall": test_rec,
+            "Test F1": test_f1,
+            "Test AUC": test_auc,
+        })
+
+        if (epoch+1) % 10 == 0:
+            weights_path = f"Defense/HIV/weights/fine_tuned/model_{
+                epoch+1}.pth"
+            torch.save(model.state_dict(), weights_path)
 
 
 if __name__ == '__main__':
