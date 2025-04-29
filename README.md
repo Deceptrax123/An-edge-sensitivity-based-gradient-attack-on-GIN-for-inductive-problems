@@ -1,5 +1,5 @@
 # Edge Sensitivity Based Gradient Attacks
-Official code of our paper "An edge sensitivity based gradient attack on graph isomorphic networks for graph classification problems" accepted in Scientific Reports. Link will be added after publication.
+Official code of our paper "An edge sensitivity based gradient attack on graph isomorphic networks for graph classification problems" accepted in Scientific Reports. The paper can be found <a href="https://www.nature.com/articles/s41598-025-97956-7">here</a>. 
 
 ## Contrastive Pre-Training
 ![Diagram_1](fig_1.png)
